@@ -1,5 +1,5 @@
-// Supabase connection. The anon key is public by design; row-level security keeps each user's rows private.
+// Supabase connection. The publishable key is public by design; row-level security keeps each user's rows private.
 window.BADGEIN_CONFIG = {
-  url: "YOUR_SUPABASE_URL",
-  anonKey: "YOUR_SUPABASE_ANON_KEY"
+  url: "https://figzeussfydvzmkscdcn.supabase.co",
+  anonKey: "sb_publishable_DH9H9rxcGA4Krv7tZ3wW_w_FqXTCwZk"
 };
