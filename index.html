@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Badge-In</title>
+<meta name="theme-color" content="#2340c9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Badge-In">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: single phone column — window gauge, today's call, this week, upcoming weeks, then the log grid. */
+:root{
+  --bg:#eef0f5; --surface:#ffffff; --fg:#161a26; --muted:#5d6477; --line:#d9dce6;
+  --accent:#2340c9; --accent-soft:#e3e8fb;
+  --office:#157a4c; --office-soft:#dcf1e6;
+  --off:#b26a00; --off-soft:#fbecd3;
+  --hol:#1f6f99; --hol-soft:#dbeef8;
+  --miss:#9aa0b0; --risk:#b3261e; --risk-soft:#fbe1de;
+  --f-display:"Familjen Grotesk","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f121a; --surface:#181c27; --fg:#e8eaf2; --muted:#9aa1b5; --line:#2a3040;
+  --accent:#8ea2ff; --accent-soft:#232c55;
+  --office:#5fd29a; --office-soft:#16372a;
+  --off:#f0b35a; --off-soft:#3a2b12;
+  --hol:#6cc2ec; --hol-soft:#12303f;
+  --miss:#5e6578; --risk:#ff8a80; --risk-soft:#3d1a18; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f121a; --surface:#181c27; --fg:#e8eaf2; --muted:#9aa1b5; --line:#2a3040;
+  --accent:#8ea2ff; --accent-soft:#232c55;
+  --office:#5fd29a; --office-soft:#16372a;
+  --off:#f0b35a; --off-soft:#3a2b12;
+  --hol:#6cc2ec; --hol-soft:#12303f;
+  --miss:#5e6578; --risk:#ff8a80; --risk-soft:#3d1a18; color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
+button{-webkit-appearance:none;appearance:none}
+.tools{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.tool{font:500 12.5px var(--f-body);padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.tool:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:520px;margin:0 auto;padding-inline:16px;padding-block:18px 48px;display:flex;flex-direction:column;gap:18px}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+h1{font-family:var(--f-display);font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.date{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.label{font-family:var(--f-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+section{display:flex;flex-direction:column}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* Gauge */
+.gauge-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pct{font-family:var(--f-display);font-size:56px;font-weight:700;line-height:.9;letter-spacing:-.03em}
+.pct small{font-size:24px;font-weight:600;color:var(--muted)}
+.tally{text-align:right;font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.tally b{color:var(--fg);font-size:18px;font-weight:600}
+.bar{position:relative;height:12px;border-radius:6px;background:var(--line);margin:16px 0 6px;overflow:visible}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:6px;background:var(--accent)}
+.bar.ok i{background:var(--office)} .bar.bad i{background:var(--risk)}
+.bar .tick{position:absolute;top:-5px;bottom:-5px;left:80%;width:2px;background:var(--fg)}
+.bar-legend{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.verdict{margin:14px 0 0;font-size:16px;font-weight:500;text-wrap:pretty}
+.sub{margin:6px 0 0;color:var(--muted);font-size:13.5px;text-wrap:pretty}
+.official{display:flex;justify-content:space-between;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:13px;color:var(--muted)}
+
+/* Today */
+.today-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.today-head h2{font-family:var(--f-display);font-size:20px;margin:0}
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:5px 10px;border-radius:999px;white-space:nowrap}
+.p-must{background:var(--risk-soft);color:var(--risk)}
+.p-go{background:var(--accent-soft);color:var(--accent)}
+.p-free{background:var(--office-soft);color:var(--office)}
+.p-none{background:var(--line);color:var(--muted)}
+.p-done{background:var(--office-soft);color:var(--office)}
+.nudge{margin:10px 0 0;font-size:14.5px;text-wrap:pretty}
+.marks{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.mark{font:600 13px var(--f-body);padding:12px 4px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+.mark:focus-visible,.cell:focus-visible,.opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mark[aria-pressed="true"].s-office{background:var(--office);border-color:var(--office);color:var(--surface)}
+.mark[aria-pressed="true"].s-wfh{background:var(--fg);border-color:var(--fg);color:var(--surface)}
+.mark[aria-pressed="true"].s-leave{background:var(--off);border-color:var(--off);color:var(--surface)}
+.mark[aria-pressed="true"].s-holiday{background:var(--hol);border-color:var(--hol);color:var(--surface)}
+
+/* Upcoming */
+.weeks{display:flex;flex-direction:column}
+.wk{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.wk:last-child{border-bottom:0;padding-bottom:0}
+.wk:first-child{padding-top:0}
+.wk-range{font-weight:600}
+.wk-note{grid-column:1/-1;color:var(--muted);font-size:13px}
+.tradeoff{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:var(--accent-soft);font-size:13.5px;text-wrap:pretty}
+
+/* Log grid */
+.grid-wrap{overflow-x:auto}
+table{width:100%;border-collapse:separate;border-spacing:0 6px}
+th{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;padding:0 2px}
+th:first-child{text-align:left}
+td{padding:0 3px;text-align:center;vertical-align:middle}
+td.wlabel{text-align:left;font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap;padding-left:0}
+td.wtally{font-family:var(--f-mono);font-size:12.5px;font-weight:600;white-space:nowrap}
+.cell{width:100%;min-width:44px;height:44px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font:500 12px var(--f-mono);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;line-height:1.1}
+.cell .d{font-size:13px;color:var(--fg)}
+.cell .t{font-size:9.5px;letter-spacing:.04em;text-transform:uppercase}
+.cell.office{background:var(--office-soft);border-color:var(--office)} .cell.office .t{color:var(--office)}
+.cell.leave{background:var(--off-soft);border-color:var(--off)} .cell.leave .t{color:var(--off)}
+.cell.holiday{background:var(--hol-soft);border-color:var(--hol)} .cell.holiday .t{color:var(--hol)}
+.cell.missed .t{color:var(--miss)}
+.cell.future{border-style:dashed}
+.cell.today{box-shadow:0 0 0 2px var(--accent)}
+.cell.pre{opacity:.35;cursor:default}
+tr.inwin td.wlabel{color:var(--fg)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12px;color:var(--muted)}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;background:var(--c)}
+.foot{font-size:12px;color:var(--muted);text-align:center}
+
+/* Sheet */
+.scrim{position:fixed;inset:0;background:rgba(10,12,20,.45);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet{background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
+.sheet h3{font-family:var(--f-display);font-size:19px;margin:0}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.opt{padding:14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:600 14px var(--f-body);cursor:pointer;text-align:left}
+.opt.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt.clear{grid-column:1/-1;text-align:center;color:var(--muted);font-weight:500}
+.sync{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+@media (prefers-reduced-motion: no-preference){.bar i{transition:width .5s ease}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Badge-In</h1>
+    <span class="date" id="hdrDate"></span>
+  </header>
+
+  <section class="panel" aria-labelledby="gLabel">
+    <p class="label" id="gLabel">This week's window · <span id="winRange"></span></p>
+    <div class="gauge-top">
+      <div class="pct num" id="pct">–</div>
+      <div class="tally"><b class="num" id="tally">–</b><br><span id="needTxt"></span></div>
+    </div>
+    <div class="bar" id="bar"><i id="barFill" style="width:0"></i><span class="tick" aria-hidden="true"></span></div>
+    <div class="bar-legend"><span>0%</span><span style="margin-left:auto;margin-right:12%">80% line</span><span>100%</span></div>
+    <p class="verdict" id="verdict"></p>
+    <p class="sub" id="verdictSub"></p>
+    <div class="official"><span>Last 4 full weeks (<span id="offRange"></span>)</span><span class="num" id="offVal"></span></div>
+  </section>
+
+  <section class="panel" aria-labelledby="todayTitle">
+    <div class="today-head">
+      <h2 id="todayTitle">Today</h2>
+      <span class="pill p-none" id="todayPill">–</span>
+    </div>
+    <p class="nudge" id="todayNudge"></p>
+    <div class="marks" id="marks" role="group" aria-label="Mark today">
+      <button class="mark s-office" data-s="office" id="m-office">Office</button>
+      <button class="mark s-wfh" data-s="wfh" id="m-wfh">WFH</button>
+      <button class="mark s-leave" data-s="leave" id="m-leave">Leave</button>
+      <button class="mark s-holiday" data-s="holiday" id="m-holiday">Holiday</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="upLabel">
+    <p class="label" id="upLabel">Minimum plan · next 4 weeks</p>
+    <div class="panel">
+      <p class="tradeoff" id="tradeoff" hidden></p>
+      <div class="weeks" id="weeks"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="logLabel">
+    <p class="label" id="logLabel">Log · tap a day to edit</p>
+    <div class="panel grid-wrap">
+      <table>
+        <thead><tr><th>Week</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Count</th></tr></thead>
+        <tbody id="grid"></tbody>
+      </table>
+      <div class="legend">
+        <span style="--c:var(--office)">Office</span>
+        <span style="--c:var(--miss)">WFH / not in</span>
+        <span style="--c:var(--off)">Leave</span>
+        <span style="--c:var(--hol)">Holiday</span>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Mon + Tue + one of Wed/Thu each week. Leave or holiday on Mon/Tue drops that day; Wed/Thu drops only if both are off. 80% of the last 4 full weeks, rounded up.</p>
+  <div class="tools">
+    <button class="tool" id="exportBtn">Copy backup</button>
+    <button class="tool" id="importBtn">Restore backup</button>
+  </div>
+  <p class="foot sync" id="sync"></p>
+  <textarea id="restoreBox" hidden rows="4" style="width:100%;font:12px var(--f-mono);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px" placeholder="Paste backup text, then tap Restore backup again"></textarea>
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h3 id="sheetTitle"></h3>
+    <div class="opts" id="opts">
+      <button class="opt" data-s="office" id="o-office">Office</button>
+      <button class="opt" data-s="wfh" id="o-wfh">WFH</button>
+      <button class="opt" data-s="leave" id="o-leave">Leave</button>
+      <button class="opt" data-s="holiday" id="o-holiday">Holiday</button>
+      <button class="opt clear" data-s="" id="o-clear">Clear this day</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const START = "2026-08-31";          // first tracked Monday
+const CACHE_KEY = "badgein.days.v1";
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+let days = {};                        // iso -> office | wfh | leave | holiday
+
+// ---------- dates ----------
+const pad = n => String(n).padStart(2,"0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d); };
+const add = (d,n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n);
+const monday = d => add(d, -((d.getDay()+6)%7));
+const fmt = d => `${MON[d.getMonth()]} ${d.getDate()}`;
+const range = (a,b) => a.getMonth()===b.getMonth() ? `${fmt(a)}–${b.getDate()}` : `${fmt(a)} – ${fmt(b)}`;
+const need80 = exp => Math.ceil(exp*0.8 - 1e-9);
+const isOff = s => s==="leave" || s==="holiday";
+
+// ---------- rules ----------
+// One week: three slots — Mon, Tue, Flex (Wed or Thu).
+function week(mon, todayIso){
+  if (iso(mon) < START) return null;
+  const ds = [0,1,2,3].map(i => add(mon,i));
+  const st = ds.map(d => days[iso(d)]);
+  // a day can still be used if it's in the future, or it's today and not already marked as not-in
+  const usable = i => { const k = iso(ds[i]); return k > todayIso || (k === todayIso && !st[i]); };
+  const slots = [
+    {name:"Mon", idx:[0]}, {name:"Tue", idx:[1]}, {name:"Flex", idx:[2,3]}
+  ].map(s => {
+    const live = s.idx.filter(i => !isOff(st[i]));
+    const expected = live.length > 0;
+    const attended = expected && live.some(i => st[i]==="office");
+    const openDays = attended ? [] : live.filter(usable);
+    return {...s, expected, attended, open: expected && !attended && openDays.length>0, openDays};
+  });
+  const expected = slots.filter(s=>s.expected).length;
+  const attended = slots.filter(s=>s.attended).length;
+  const open = slots.filter(s=>s.open).length;
+  return {mon, ds, st, slots, expected, attended, open};
+}
+
+function analyse(){
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tIso = iso(today);
+  const thisMon = monday(today);
+  const W = k => week(add(thisMon, 7*k), tIso);
+
+  // current window = this week + previous 3
+  const cur = W(0);
+  const prev = [W(-3),W(-2),W(-1)].filter(Boolean);
+  const expWin = prev.reduce((a,w)=>a+w.expected,0) + cur.expected;
+  const attWin = prev.reduce((a,w)=>a+w.attended,0) + cur.attended;
+  const req = need80(expWin);
+  const needNow = Math.max(0, req - attWin);
+
+  // official: last 4 completed weeks
+  const done = [W(-4),W(-3),W(-2),W(-1)].filter(Boolean);
+  const offExp = done.reduce((a,w)=>a+w.expected,0), offAtt = done.reduce((a,w)=>a+w.attended,0);
+
+  // projection: attend the minimum each week
+  function project(curAtt){
+    const att = {"-3":W(-3)?.attended??0, "-2":W(-2)?.attended??0, "-1":W(-1)?.attended??0, "0":curAtt};
+    const exp = {"-3":W(-3)?.expected??0, "-2":W(-2)?.expected??0, "-1":W(-1)?.expected??0, "0":cur.expected};
+    const out = [];
+    for (let k=1;k<=4;k++){
+      const w = W(k); exp[k]=w.expected;
+      let e=0,a=0; for (let j=k-3;j<=k;j++){ e+=exp[j]; if (j<k) a+=att[j]; }
+      a += w.attended;
+      const r = need80(e);
+      const n = Math.max(0, r - a);
+      att[k] = w.attended + Math.min(n, w.open);
+      out.push({w, need:n, open:w.open, req:r, exp:e, short: n > w.open});
+    }
+    return out;
+  }
+  const minPlan = project(cur.attended + Math.min(needNow, cur.open));
+  const maxPlan = cur.open > Math.min(needNow, cur.open) ? project(cur.attended + cur.open) : null;
+
+  return {today, tIso, cur, prev, expWin, attWin, req, needNow, done, offExp, offAtt, minPlan, maxPlan, winStart: prev[0]?.mon ?? cur.mon};
+}
+
+// ---------- render ----------
+function render(){
+  const A = analyse();
+  const {today, tIso, cur} = A;
+  document.getElementById("hdrDate").textContent = `${DOW[today.getDay()]} ${fmt(today)}`;
+
+  // gauge
+  const pct = A.expWin ? A.attWin/A.expWin*100 : 0;
+  document.getElementById("winRange").textContent = range(A.winStart, add(cur.mon,6));
+  document.getElementById("pct").innerHTML = `${Math.floor(pct)}<small>%</small>`;
+  document.getElementById("tally").textContent = `${A.attWin} / ${A.expWin}`;
+  document.getElementById("needTxt").textContent = `need ${A.req} to hit 80%`;
+  const bar = document.getElementById("bar");
+  document.getElementById("barFill").style.width = Math.min(100,pct)+"%";
+  bar.className = "bar " + (A.needNow===0 ? "ok" : A.needNow > cur.open ? "bad" : "");
+
+  const V = document.getElementById("verdict"), S = document.getElementById("verdictSub");
+  if (A.needNow === 0){
+    V.textContent = `You're at the 80% line for this window. The rest of this week is optional.`;
+    const nx = A.minPlan[0];
+    S.textContent = nx.need >= nx.w.expected && nx.w.expected>0
+      ? `Heads-up: if you skip, next week needs all ${nx.w.expected}.` : "";
+  } else if (A.needNow <= cur.open){
+    V.textContent = A.needNow === cur.open
+      ? `Go to every remaining counted day this week (${A.needNow}).`
+      : `Go ${A.needNow} more time${A.needNow>1?"s":""} this week. ${cur.open} counted slot${cur.open>1?"s":""} left.`;
+    S.textContent = "";
+  } else {
+    V.textContent = `This window will land below 80%. You're ${A.needNow - cur.open} short even if you go every remaining day.`;
+    S.textContent = `Go to all ${cur.open} remaining slot${cur.open===1?"":"s"} to limit the damage; see the plan below for recovery.`;
+  }
+  const d0 = A.done[0]?.mon;
+  document.getElementById("offRange").textContent = d0 ? range(d0, add(cur.mon,-1)) : "–";
+  document.getElementById("offVal").textContent = A.offExp
+    ? `${A.offAtt}/${A.offExp} · ${Math.floor(A.offAtt/A.offExp*100)}% ${A.offAtt>=need80(A.offExp)?"✓":"✗"}` : "–";
+
+  renderToday(A);
+  renderPlan(A);
+  renderGrid(A);
+}
+
+function renderToday(A){
+  const {today, tIso, cur} = A;
+  const di = (today.getDay()+6)%7;           // 0=Mon
+  const pill = document.getElementById("todayPill"), nudge = document.getElementById("todayNudge");
+  const st = days[tIso];
+  document.querySelectorAll(".mark").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.s===st)));
+  document.getElementById("todayTitle").textContent = `Today · ${DOW[today.getDay()]}`;
+  const set = (cls, txt, msg) => { pill.className = "pill "+cls; pill.textContent = txt; nudge.textContent = msg; };
+
+  if (di > 3){ // Fri–Sun
+    const nx = A.minPlan[0];
+    document.getElementById("marks").hidden = true;
+    return set("p-none","Not counted", `Fridays and weekends don't count. Next week: go ${nx.need} of ${nx.w.expected}${nx.short?" (you'll be short)":""}.`);
+  }
+  document.getElementById("marks").hidden = false;
+  const slot = cur.slots.find(s => s.idx.includes(di));
+  const dayName = DOW[today.getDay()];
+  if (isOff(st)) return set("p-none", st==="leave"?"On leave":"Holiday", flexOffNote(cur, di, A) || "This day doesn't count against you.");
+  if (slot.attended && st==="office") return set("p-done","Badged in", slot.name==="Flex" ? "Flex slot covered for this week." : "Counted.");
+  if (slot.name==="Flex" && slot.attended) return set("p-none","Not needed", "You already covered this week's Wed/Thu slot. Today won't add anything.");
+  if (st==="wfh") return set("p-none","WFH", A.needNow>0 ? `You still need ${A.needNow} more this week.` : "Fine — you're at the line.");
+
+  // unmarked today
+  const other = slot.name==="Flex" ? slot.openDays.filter(i=>i!==di) : [];
+  const otherTxt = other.length ? ` or ${DOW[(other[0]+1)%7]}` : "";
+  if (A.needNow === 0){
+    const nx = A.minPlan[0];
+    return set("p-free","Optional", `You're already at 80% for this window.${nx.need>=nx.w.expected&&nx.w.expected?` Going now means next week isn't all-or-nothing.`:""}`);
+  }
+  if (A.needNow >= cur.open){
+    const alt = other.length && A.needNow===cur.open ? ` (${DOW[(other[0]+1)%7]} also works for the flex slot)` : "";
+    return set("p-must","Go in", (flexOffNote(cur, di, A) || `Every remaining slot is needed this week.`) + alt);
+  }
+  return set("p-go","Pick "+A.needNow+" of "+cur.open, `You need ${A.needNow} of the ${cur.open} remaining slots this week. Today${otherTxt} is one of them.`);
+}
+
+// Wed/Thu swap logic: if one flex day is off, point to the other.
+function flexOffNote(w, di, A){
+  const f = w.slots[2];
+  if (f.attended) return "";
+  const [wed, thu] = [w.st[2], w.st[3]];
+  if (isOff(wed) && !isOff(thu) && f.openDays.includes(3)) return `Wednesday is off, so Thursday is your flex day this week${A.needNow>0?" — go in on Thursday.":"."}`;
+  if (isOff(thu) && !isOff(wed) && f.openDays.includes(2)) return `Thursday is off, so Wednesday is your flex day this week${A.needNow>0?" — go in on Wednesday.":"."}`;
+  return "";
+}
+
+function renderPlan(A){
+  const box = document.getElementById("weeks"); box.innerHTML = "";
+  const tr = document.getElementById("tradeoff");
+  if (A.maxPlan && A.minPlan[0].need > A.maxPlan[0].need){
+    tr.hidden = false;
+    tr.textContent = `Trade-off: skip the rest of this week and next week needs ${A.minPlan[0].need} of ${A.minPlan[0].w.expected}. Go once more this week and it drops to ${A.maxPlan[0].need}.`;
+  } else tr.hidden = true;
+
+  // Flex-day nudge for the current week (if it hasn't been shown elsewhere)
+  A.minPlan.forEach(p => {
+    const el = document.createElement("div"); el.className = "wk";
+    const pill = p.short ? ["p-must", `Short by ${p.need-p.open}`]
+      : p.need===0 ? ["p-free","0 needed"]
+      : p.need>=p.w.expected ? ["p-must",`All ${p.need}`]
+      : ["p-go",`${p.need} of ${p.w.expected}`];
+    const offNote = weekOffNote(p.w);
+    el.innerHTML = `<span class="wk-range">${range(p.w.mon, add(p.w.mon,6))}</span><span class="pill ${pill[0]}">${pill[1]}</span>` +
+      `<span class="wk-note">${p.w.expected<3?`${p.w.expected} counted slot${p.w.expected===1?"":"s"} (leave/holiday). `:""}Window needs ${p.req} of ${p.exp}.${offNote?" "+offNote:""}</span>`;
+    box.appendChild(el);
+  });
+}
+function weekOffNote(w){
+  const [wed,thu] = [w.st[2], w.st[3]];
+  if (isOff(wed) && !isOff(thu)) return "Wed off: use Thursday.";
+  if (isOff(thu) && !isOff(wed)) return "Thu off: use Wednesday.";
+  return "";
+}
+
+function renderGrid(A){
+  const tb = document.getElementById("grid"); tb.innerHTML = "";
+  const {tIso, cur} = A;
+  const winStartIso = iso(A.winStart);
+  const last = add(cur.mon, 7*4);
+  for (let m = parse(START); m <= last; m = add(m,7)){
+    const w = week(m, tIso);
+    const tr = document.createElement("tr");
+    if (iso(m) >= winStartIso && iso(m) <= iso(cur.mon)) tr.className = "inwin";
+    let html = `<td class="wlabel">${fmt(m)}</td>`;
+    w.ds.forEach((d,i) => {
+      const k = iso(d), s = w.st[i];
+      const future = k > tIso;
+      let cls = "cell", tag = "";
+      if (s){ cls += " "+(s==="wfh"?"missed":s); tag = s==="office"?"In":s==="wfh"?"WFH":s==="leave"?"Leave":"Hol"; }
+      else if (!future && k!==tIso){ cls += " missed"; tag = "–"; }
+      if (future) cls += " future";
+      if (k===tIso) cls += " today";
+      html += `<td><button class="${cls}" data-d="${k}" aria-label="${DOW[d.getDay()]} ${fmt(d)}${s?", "+s:""}"><span class="d">${d.getDate()}</span><span class="t">${tag||"&nbsp;"}</span></button></td>`;
+    });
+    const past = iso(add(m,3)) < tIso;
+    html += `<td class="wtally">${past||iso(m)<=tIso ? `${w.attended}/${w.expected}` : `<span style="color:var(--muted)">·/${w.expected}</span>`}</td>`;
+    tr.innerHTML = html;
+    tb.appendChild(tr);
+  }
+}
+
+// ---------- editing ----------
+let editing = null;
+const scrim = document.getElementById("scrim");
+function openSheet(k){
+  editing = k; const d = parse(k);
+  document.getElementById("sheetTitle").textContent = `${DOW[d.getDay()]} ${fmt(d)}`;
+  document.querySelectorAll(".opt").forEach(o => o.classList.toggle("sel", o.dataset.s === (days[k]||"") && o.dataset.s!==""));
+  scrim.hidden = false; document.getElementById("o-office").focus();
+}
+function closeSheet(){ scrim.hidden = true; editing = null; }
+document.getElementById("grid").addEventListener("click", e => { const b = e.target.closest(".cell"); if (b) openSheet(b.dataset.d); });
+scrim.addEventListener("click", e => { if (e.target === scrim) closeSheet(); });
+document.addEventListener("keydown", e => { if (e.key==="Escape" && !scrim.hidden) closeSheet(); });
+document.getElementById("opts").addEventListener("click", e => { const o = e.target.closest(".opt"); if (!o) return; setDay(editing, o.dataset.s); closeSheet(); });
+document.getElementById("marks").addEventListener("click", e => {
+  const b = e.target.closest(".mark"); if (!b) return;
+  const k = iso(new Date()); setDay(k, days[k]===b.dataset.s ? "" : b.dataset.s);
+});
+
+function setDay(k, s){
+  if (s) days[k] = s; else delete days[k];
+  saveCache(); render();
+}
+
+// ---------- storage ----------
+const SEED = ["2026-09-01","2026-09-03","2026-09-07","2026-09-08","2026-09-10","2026-09-14","2026-09-15","2026-09-16","2026-09-21","2026-09-22","2026-09-28","2026-09-29"];
+function setSync(t){ document.getElementById("sync").textContent = t; }
+function saveCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(days)); }catch(e){ setSync("Couldn't save on this device."); } }
+try{
+  const raw = localStorage.getItem(CACHE_KEY);
+  if (raw === null){ SEED.forEach(k => days[k] = "office"); saveCache(); }
+  else { const c = JSON.parse(raw); if (c && typeof c==="object") days = c; }
+}catch(e){ SEED.forEach(k => days[k] = "office"); }
+
+// backup: copy all entries as text, restore by pasting
+document.getElementById("exportBtn").addEventListener("click", async () => {
+  const txt = JSON.stringify(days);
+  try{ await navigator.clipboard.writeText(txt); setSync("Backup copied. Paste it into a note to keep it safe."); }
+  catch(e){ const b = document.getElementById("restoreBox"); b.hidden=false; b.value=txt; b.select(); setSync("Select all and copy the text above."); }
+});
+document.getElementById("importBtn").addEventListener("click", () => {
+  const b = document.getElementById("restoreBox");
+  if (b.hidden || !b.value.trim()){ b.hidden=false; b.value=""; b.focus(); setSync("Paste your backup, then tap Restore backup again."); return; }
+  try{
+    const c = JSON.parse(b.value.trim());
+    if (!c || typeof c!=="object" || Array.isArray(c)) throw 0;
+    const ok = Object.entries(c).filter(([k,v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && ["office","wfh","leave","holiday"].includes(v));
+    days = Object.fromEntries(ok); saveCache(); render();
+    b.hidden = true; b.value = ""; setSync(`Restored ${ok.length} days.`);
+  }catch(e){ setSync("That text isn't a Badge-In backup. Copy it again from the other device."); }
+});
+
+render();
+setInterval(() => { if (scrim.hidden) render(); }, 60*1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && scrim.hidden) render(); });
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(()=>{}));
+</script>
+
+</body>
+</html>
