@@ -46,6 +46,19 @@
 html{-webkit-text-size-adjust:100%}
 body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
 button{-webkit-appearance:none;appearance:none}
+.chip{display:inline-flex;align-items:center;gap:6px;font:500 11.5px var(--f-mono);letter-spacing:.03em;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;white-space:nowrap}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--miss)}
+.chip.ok::before{background:var(--office)} .chip.wait::before{background:var(--off)} .chip.err::before{background:var(--risk)}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hdr-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.field input{font:15px var(--f-body);padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.field input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.primary{font:600 15px var(--f-body);padding:13px;border-radius:10px;border:0;background:var(--accent);color:var(--surface);cursor:pointer}
+.primary:disabled{opacity:.6}
+.primary:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.msg{font-size:13px;color:var(--muted);margin:0;min-height:1em}
+.msg.err{color:var(--risk)}
 .tools{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .tool{font:500 12.5px var(--f-body);padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
 .tool:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -141,7 +154,7 @@ tr.inwin td.wlabel{color:var(--fg)}
 <div class="wrap">
   <header>
     <h1>Badge-In</h1>
-    <span class="date" id="hdrDate"></span>
+    <div class="hdr-right"><span class="date" id="hdrDate"></span><button class="chip" id="syncChip" hidden>Sign in to sync</button></div>
   </header>
 
   <section class="panel" aria-labelledby="gLabel">
@@ -217,6 +230,25 @@ tr.inwin td.wlabel{color:var(--fg)}
   </div>
 </div>
 
+<div class="scrim" id="authScrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <h3 id="authTitle">Sync</h3>
+    <form id="authForm" style="display:flex;flex-direction:column;gap:10px">
+      <label class="field" for="authEmail">Email<input id="authEmail" type="email" autocomplete="username" required></label>
+      <label class="field" for="authPass">Password<input id="authPass" type="password" autocomplete="current-password" required></label>
+      <button class="primary" id="authSubmit" type="submit">Sign in</button>
+      <p class="msg" id="authMsg">Your entries sync to your own Supabase project.</p>
+    </form>
+    <div id="acct" hidden style="display:flex;flex-direction:column;gap:10px">
+      <p class="msg" id="acctInfo"></p>
+      <button class="primary" id="syncNow" type="button">Sync now</button>
+      <button class="opt clear" id="signOut" type="button">Sign out</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="supabase.js"></script>
 <script>
 const START = "2026-08-31";          // first tracked Monday
 const CACHE_KEY = "badgein.days.v1";
@@ -462,8 +494,11 @@ document.getElementById("marks").addEventListener("click", e => {
 });
 
 function setDay(k, s){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(k||"")) return;
   if (s) days[k] = s; else delete days[k];
-  saveCache(); render();
+  pending[k] = s || null; savePending();
+  try{ localStorage.removeItem(SEED_FLAG); }catch(e){}
+  saveCache(); render(); scheduleSync();
 }
 
 // ---------- storage ----------
@@ -472,7 +507,7 @@ function setSync(t){ document.getElementById("sync").textContent = t; }
 function saveCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(days)); }catch(e){ setSync("Couldn't save on this device."); } }
 try{
   const raw = localStorage.getItem(CACHE_KEY);
-  if (raw === null){ SEED.forEach(k => days[k] = "office"); saveCache(); }
+  if (raw === null){ SEED.forEach(k => days[k] = "office"); saveCache(); try{ localStorage.setItem("badgein.seedOnly","1"); }catch(e){} }
   else { const c = JSON.parse(raw); if (c && typeof c==="object") days = c; }
 }catch(e){ SEED.forEach(k => days[k] = "office"); }
 
@@ -489,10 +524,123 @@ document.getElementById("importBtn").addEventListener("click", () => {
     const c = JSON.parse(b.value.trim());
     if (!c || typeof c!=="object" || Array.isArray(c)) throw 0;
     const ok = Object.entries(c).filter(([k,v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && ["office","wfh","leave","holiday"].includes(v));
-    days = Object.fromEntries(ok); saveCache(); render();
+    days = Object.fromEntries(ok); ok.forEach(([k,v]) => pending[k] = v); savePending(); saveCache(); render(); scheduleSync();
     b.hidden = true; b.value = ""; setSync(`Restored ${ok.length} days.`);
   }catch(e){ setSync("That text isn't a Badge-In backup. Copy it again from the other device."); }
 });
+
+// ---------- cloud sync (Supabase) ----------
+const PENDING_KEY = "badgein.pending.v1", SEED_FLAG = "badgein.seedOnly";
+let pending = {};
+try{ pending = JSON.parse(localStorage.getItem(PENDING_KEY)||"{}") || {}; }catch(e){ pending = {}; }
+function savePending(){ try{ localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); }catch(e){} }
+
+const cfg = window.BADGEIN_CONFIG || {};
+const cloudOn = !!(cfg.url && cfg.anonKey && !/YOUR_/.test(cfg.url + cfg.anonKey) && window.supabase);
+const sb = cloudOn ? window.supabase.createClient(cfg.url, cfg.anonKey, {auth:{persistSession:true, autoRefreshToken:true, storageKey:"badgein.auth"}}) : null;
+let session = null, syncing = false, again = false, syncTimer = null, lastSync = null, syncErr = "";
+const chip = document.getElementById("syncChip"), authScrim = document.getElementById("authScrim");
+
+function paintChip(){
+  if (!cloudOn){ chip.hidden = true; return; }
+  chip.hidden = false;
+  const n = Object.keys(pending).length;
+  let cls = "", txt = "Sign in to sync";
+  if (session){
+    if (syncErr){ cls = "err"; txt = navigator.onLine ? "Sync error" : `Offline${n?` · ${n} waiting`:""}`; if(!navigator.onLine) cls="wait"; }
+    else if (syncing){ cls = "wait"; txt = "Syncing…"; }
+    else if (n){ cls = "wait"; txt = `${n} waiting`; }
+    else { cls = "ok"; txt = lastSync ? `Synced ${pad(lastSync.getHours())}:${pad(lastSync.getMinutes())}` : "Synced"; }
+  }
+  chip.className = "chip " + cls; chip.textContent = txt;
+}
+function scheduleSync(){ paintChip(); if (!session) return; clearTimeout(syncTimer); syncTimer = setTimeout(sync, 600); }
+
+async function sync(){
+  if (!sb || !session) return;
+  if (syncing){ again = true; return; }
+  syncing = true; syncErr = ""; paintChip();
+  try{
+    // 1. push local changes
+    for (const [k, s] of Object.entries({...pending})){
+      const res = s
+        ? await sb.from("attendance_days").upsert({user_id: session.user.id, day:k, status:s, updated_at:new Date().toISOString()}, {onConflict:"user_id,day"})
+        : await sb.from("attendance_days").delete().eq("day", k);
+      if (res.error) throw res.error;
+      if (pending[k] === s){ delete pending[k]; savePending(); }
+    }
+    // 2. pull the full record
+    const {data, error} = await sb.from("attendance_days").select("day,status").limit(5000);
+    if (error) throw error;
+    const next = {};
+    data.forEach(r => { if (r.status) next[r.day] = r.status; });
+    for (const [k, s] of Object.entries(pending)){ if (s) next[k] = s; else delete next[k]; }
+    days = next; saveCache(); lastSync = new Date();
+    if (scrim.hidden) render();
+  }catch(e){
+    syncErr = e?.message || "Couldn't reach Supabase";
+  }finally{
+    syncing = false; paintChip();
+    if (again){ again = false; sync(); }
+  }
+}
+
+// First sign-in on a device: queue up local entries the server doesn't have yet.
+async function adoptLocal(){
+  const flag = "badgein.adopted." + session.user.id;
+  try{ if (localStorage.getItem(flag)) return; }catch(e){}
+  let seedOnly = false; try{ seedOnly = localStorage.getItem(SEED_FLAG) === "1"; }catch(e){}
+  if (!seedOnly){
+    const {data, error} = await sb.from("attendance_days").select("day");
+    if (error) return;
+    const have = new Set(data.map(r => r.day));
+    Object.entries(days).forEach(([k,s]) => { if (!have.has(k) && !(k in pending)) pending[k] = s; });
+    savePending();
+  }
+  try{ localStorage.setItem(flag, "1"); }catch(e){}
+}
+
+function openAuth(){
+  const signedIn = !!session;
+  document.getElementById("authForm").hidden = signedIn;
+  document.getElementById("acct").hidden = !signedIn;
+  document.getElementById("authTitle").textContent = signedIn ? "Sync" : "Sign in to sync";
+  if (signedIn){
+    const n = Object.keys(pending).length;
+    document.getElementById("acctInfo").textContent =
+      `Signed in as ${session.user.email}. ` + (syncErr ? `Last attempt failed: ${syncErr}` : n ? `${n} change${n>1?"s":""} waiting to upload.` : lastSync ? `Last synced ${lastSync.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}.` : "");
+  }
+  authScrim.hidden = false;
+  (signedIn ? document.getElementById("syncNow") : document.getElementById("authEmail")).focus();
+}
+chip.addEventListener("click", openAuth);
+authScrim.addEventListener("click", e => { if (e.target === authScrim) authScrim.hidden = true; });
+document.addEventListener("keydown", e => { if (e.key==="Escape") authScrim.hidden = true; });
+document.getElementById("authForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("authSubmit"), msg = document.getElementById("authMsg");
+  btn.disabled = true; msg.className = "msg"; msg.textContent = "Signing in…";
+  const {error} = await sb.auth.signInWithPassword({email: document.getElementById("authEmail").value.trim(), password: document.getElementById("authPass").value});
+  btn.disabled = false;
+  if (error){ msg.className = "msg err"; msg.textContent = error.message === "Invalid login credentials" ? "Email or password is wrong." : error.message; return; }
+  document.getElementById("authPass").value = ""; msg.textContent = ""; authScrim.hidden = true;
+});
+document.getElementById("syncNow").addEventListener("click", async () => { await sync(); openAuth(); });
+document.getElementById("signOut").addEventListener("click", async () => {
+  await sb.auth.signOut(); authScrim.hidden = true;
+  setSync("Signed out. Entries stay on this phone.");
+});
+
+if (sb){
+  sb.auth.onAuthStateChange((ev, s) => {
+    const was = session?.user?.id; session = s;
+    paintChip();
+    if (s && s.user.id !== was) setTimeout(async () => { await adoptLocal(); sync(); }, 0);
+  });
+  window.addEventListener("online", () => sync());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) sync(); });
+}
+paintChip();
 
 render();
 setInterval(() => { if (scrim.hidden) render(); }, 60*1000);
